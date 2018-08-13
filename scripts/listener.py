@@ -1,45 +1,14 @@
 #!/usr/bin/env python
-# Software License Agreement (BSD License)
-#
-# Copyright (c) 2008, Willow Garage, Inc.
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions
-# are met:
-#
-#  * Redistributions of source code must retain the above copyright
-#    notice, this list of conditions and the following disclaimer.
-#  * Redistributions in binary form must reproduce the above
-#    copyright notice, this list of conditions and the following
-#    disclaimer in the documentation and/or other materials provided
-#    with the distribution.
-#  * Neither the name of Willow Garage, Inc. nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
-#
-# Revision $Id$
 
-## Simple talker demo that listens to std_msgs/Strings published
-## to the 'chatter' topic
-
-import rospy
 import cv2
 import numpy as np
 import datetime
+import sys
+
+if not (len(sys.argv) > 1 and sys.argv[1] is "debug" ):
+        import rospy
+
+
 # import cv_bridge.CvBridge
 
 from std_msgs.msg import String
@@ -49,42 +18,77 @@ from cv_bridge import CvBridge, CvBridgeError
 
 
 def callback(msg):
-    #print("got {} by {} image".format(msg.height, msg.width))
-    cv_img = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
-    image = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
-    mask = cv2.cvtColor(cv_img, cv2.COLOR_BGR2HSV)
-    #get mask for pink
+    detect_beacon(bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough"))
+
+def detect_beacon(img):
+        #convert to HSV encoding - less affected by lighting
+    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+
+    # set up tools for detecting color
     kernel = np.ones((5,5),np.uint8)
-    mask = cv2.inRange(cv_img, np.array([120,40,90]),np.array([255,120,180]))
-    mask = cv2.erode(mask,kernel,iterations = 5)
-    mask = cv2.dilate(mask,kernel,iterations = 7)
-    img, contours, hier = cv2.findContours(mask, cv2.RETR_TREE,\
+    upper_range = np.array([180,255,255])
+    lower_range = np.array([0,100,100])
+
+    # apply blur, mask and erode /dilate to find all pink reigons
+    mask = cv2.blur(hsv, (3,3))
+    mask = cv2.inRange(mask, lower_range, upper_range) #TODO work out HSV for pink
+    mask = cv2.erode(mask,kernel,iterations = 8)
+    mask = cv2.dilate(mask,kernel,iterations = 5)
+    img2, contours, hier = cv2.findContours(mask, cv2.RETR_TREE,\
                                             cv2.CHAIN_APPROX_SIMPLE)
+
+    centers = list()
+
+    # loop through all the pink edges we've found
     for c in contours:
         # get the bounding rect
         x, y, w, h = cv2.boundingRect(c)
-        # draw a green rectangle to visualize the bounding rect
-        cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
+
+        # add all the large areas to results - filter out anu remaining noise
+        if w*h < 6000: #TODO change based on video quality
+            continue
+        centers.append((x+w/2,y+h/2))
 
 
+        # for debug draw a green rectangle to visualize the bounding rect
+        cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
-    win1 = cv2.imshow("win1",image)
-    win1 = cv2.imshow("win2",mask)
+
+    # only needed for debug
+    cv2.imshow("RGB",img)
+    cv2.imshow("Mask",mask)
+    cv2.imshow("hsv",hsv)
     cv2.waitKey(2)
 
-    if (np.sum(mask == 255) >14500 and beacon_found is 0):
-            print("pink")
-            msg = rospy.wait_for_message('/camera/depth/image_raw', JointTrajectoryControllerState)
-            #cmd_pub.publish("stop - {}".format(datetime.datetime.now()))
-            print("stop - {}".format(datetime.datetime.now()))
+    return centers
 
-'''
-    img_hsv = None
-    cv2.cvtColor(image,img_hsv,cv2.COLOR_RGB2HSV);
-    namedWindow("win1", CV_WINDOW_AUTOSIZE);
-    imshow("win1", img_hsv);
-    waitkey()
-'''
+
+def stream_webcam():
+    camera_port = 0
+
+
+    #Number of frames to throw away while the camera adjusts to light levels
+    ramp_frames = 30
+
+    # Now we can initialize the camera capture object with the cv2.VideoCapture class.
+    # All it needs is the index to a camera port.
+    camera = cv2.VideoCapture(camera_port)
+
+    # Captures a single image from the camera and returns it in PIL format
+
+
+    print("Taking image...")
+    # Take the actual image we want to keep
+     # read is the   easiest way to get a full image out of a VideoCapture object.
+    retval, im = camera.read()
+    print("back")
+    # A nice feature of the imwrite method is that it will automatically choose the
+    # correct format based on the file extension you provide. Convenient!
+    cv2.imshow("tst", im)
+
+    # You'll want to release the camera, otherwise you won't be able to create a new
+    # capture object until your script exits
+    del(camera)
 
 
 def listener():
@@ -100,6 +104,11 @@ def listener():
     # spin() simply keeps python from exiting until this node is stopped
     print("waiting")
 if __name__ == '__main__':
+    print ("here")
+    if(len(sys.argv) > 1 and sys.argv[1] == "debug" ):
+        stream_webcam()
+
+
     bridge = CvBridge()
     vel_publisher = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
     cmd_pub = rospy.Publisher("/cmd", String, queue_size=10)
