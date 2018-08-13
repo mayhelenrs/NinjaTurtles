@@ -22,7 +22,8 @@ def callback(msg):
 
 def detect_beacon(img):
         #convert to HSV encoding - less affected by lighting
-    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     # set up tools for detecting color
     kernel = np.ones((5,5),np.uint8)
@@ -33,7 +34,7 @@ def detect_beacon(img):
     mask = cv2.blur(hsv, (3,3))
     mask = cv2.inRange(mask, lower_range, upper_range) #TODO work out HSV for pink
     mask = cv2.erode(mask,kernel,iterations = 8)
-    mask = cv2.dilate(mask,kernel,iterations = 5)
+    mask = cv2.dilate(mask,kernel,iterations = 8)
     img2, contours, hier = cv2.findContours(mask, cv2.RETR_TREE,\
                                             cv2.CHAIN_APPROX_SIMPLE)
 
@@ -51,11 +52,11 @@ def detect_beacon(img):
 
 
         # for debug draw a green rectangle to visualize the bounding rect
-        cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 2)
+        cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
 
     # only needed for debug
-    cv2.imshow("RGB",img)
+    cv2.imshow("RGB",image)
     cv2.imshow("Mask",mask)
     cv2.imshow("hsv",hsv)
     cv2.waitKey(2)
