@@ -17,8 +17,14 @@ from geometry_msgs.msg import Twist
 from cv_bridge import CvBridge, CvBridgeError
 
 
+
 def callback(msg):
     detect_beacon(bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough"))
+
+def callback2(msg):
+    depth_image = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+
+
 
 def detect_beacon(img):
         #convert to HSV encoding - less affected by lighting
@@ -60,7 +66,6 @@ def detect_beacon(img):
     cv2.imshow("Mask",mask)
     cv2.imshow("hsv",hsv)
     cv2.waitKey(2)
-
     return centers
 
 
@@ -101,7 +106,8 @@ def listener():
     # run simultaneously.
     rospy.init_node('listener', anonymous=True)
 
-    rospy.Subscriber('/camera/color/image_raw', Image, callback)
+    #rospy.Subscriber('/camera/color/image_raw', Image, callback)
+    rospy.Subscriber('/camera/depth/image_raw', Image, callback2)
     # spin() simply keeps python from exiting until this node is stopped
     print("waiting")
 if __name__ == '__main__':
@@ -109,11 +115,11 @@ if __name__ == '__main__':
     if(len(sys.argv) > 1 and sys.argv[1] == "debug" ):
         stream_webcam()
 
-
     bridge = CvBridge()
     vel_publisher = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
     cmd_pub = rospy.Publisher("/cmd", String, queue_size=10)
     beacon_found = 0
+    depth_image = None
     #imShowing = False
     #win1 = cv2.imshow("win1",None)
     listener()
