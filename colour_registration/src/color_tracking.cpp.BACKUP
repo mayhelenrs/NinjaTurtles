@@ -1,0 +1,419 @@
+// peter kydd pkydd@cse.unsw.edu.au
+// program to pull video image data from generic USB camera/or a video file
+
+#include <cstdio>
+#include <cstdlib>
+#include <unistd.h>
+#include <vector>
+#include <limits.h>
+#include <sstream>
+
+// opencv includes
+#include <opencv2/core/core.hpp>
+#include <opencv2/opencv.hpp>
+#include <opencv2/videoio.hpp>
+#include <opencv2/highgui/highgui.hpp>
+
+
+#include "opencv2/core/version.hpp"
+
+
+const int8_t NEXT_SAME_LEVEL = 0;
+const int8_t PREV_SAME_LEVEL = 1;
+const int8_t CHILD = 2;
+const int8_t PARENT = 3 ;
+
+const int8_t DRAW_SELECTED_CONTOUR = 0;
+const int8_t DRAW_NESTED_CONTOURS = 1;
+
+
+#define CIRCLE_THICKNESS 1
+#define CIRCLE_FILL -1
+
+#define DEFAULT_HOR_RES 640
+#define DEFAULT_VER_RES 480
+
+const short ESC_KEY = 27;
+
+
+struct threshold_limits
+{
+    cv::Scalar low_thresh;
+    cv::Scalar high_thresh;
+};
+
+
+void print_usage(char* p);
+void initialise(int argc, char* argv[], cv::VideoCapture& cap, cv::Point& center_point);
+
+
+int main(int argc, char* argv[])
+{
+    
+
+    cv::VideoCapture cap;
+    cv::Point center_point;
+    initialise(argc, argv, cap, center_point);
+
+    // peter: hard code colour limits for now.
+    
+    // blue limits
+    struct threshold_limits threshold_limits_hsv;
+
+    // good base limits
+    // blue_limits_hsv.low_thresh = cv::Scalar(55,0,75);
+    // blue_limits_hsv.high_thresh = cv::Scalar(130, 255, 220);
+
+    // tuned blue limits
+    threshold_limits_hsv.low_thresh = cv::Scalar(55,75,75);
+    threshold_limits_hsv.high_thresh = cv::Scalar(130, 255, 220);
+
+
+    // struct threshold_limits threshold_limits_hsv;
+    // threshold_limits_hsv.low_thresh = cv::Scalar(0,200,200);
+    // threshold_limits_hsv.high_thresh = cv::Scalar(80, 255, 255);
+
+
+
+
+    // produce named windows
+    cv::namedWindow("input",CV_WINDOW_NORMAL);
+    cv::namedWindow("hsv",CV_WINDOW_NORMAL);
+    cv::namedWindow("blue_mask",CV_WINDOW_NORMAL);
+    
+
+    int frame_count = 0;
+    // main loop
+    while(true){
+
+        cv::Mat input;
+        if(!cap.read(input))
+        {
+            printf("ERROR: reading from cap failed.\n");
+            return 0;
+        }
+
+        // make sure we use a different (deep clone) matrix 
+        cv::Mat frame(input);
+
+
+
+
+        // convert to HSV 
+        cv::Mat hsv;
+        cv::cvtColor(frame, hsv, CV_BGR2HSV);
+        cv::imshow("hsv", hsv);
+
+        // peter: TODO: generate 4 thresholded image matrixes here, and dfind their locus
+        cv::Mat target_mask;
+
+        cv::inRange(hsv, threshold_limits_hsv.low_thresh, threshold_limits_hsv.high_thresh, target_mask);
+
+
+        // erode and dilate our masked images to remove (as much as possible) noise 
+        // peter: try a more agressive morphology here to remove the light noise? 
+        cv::erode(target_mask, target_mask, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)) );
+        cv::dilate(target_mask, target_mask, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)) ); 
+
+
+        // show the isolated colors after morphological modifications
+        cv::imshow("target_mask", target_mask); 
+
+
+        // find contours in the image
+        std::vector<std::vector<cv::Point> > target_contours;
+        std::vector<cv::Vec4i> contour_hierarchy;
+        findContours( target_mask.clone(), target_contours, contour_hierarchy, cv::RETR_CCOMP, cv::CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
+
+
+        if( target_contours.size() == 0 ){
+            std::cout << "\t"<< __func__ << ": no target contours in target frame.\n";    
+        } else {
+            
+            // check to see if we found any contours - if so, mark them (temporary) with a circle/dot
+            // find the largest contour
+            // target square
+            double largest_cont_area = INT_MIN;
+            int largest_cont_index = -1;
+            int second_largest_cont_index = -1;
+
+
+/*
+            for(unsigned int i = 0; i < target_contours.size(); ++i ){
+                int current_cont_area = cv::contourArea(target_contours.at(i));
+                if( largest_cont_area < current_cont_area ){
+                    second_largest_cont_index = largest_cont_index;
+                    largest_cont_area = current_cont_area;
+                    largest_cont_index = i;
+                }
+            }
+*/
+
+
+            // to improve sort performance, we cache the areas of each contour
+            std::vector<std::pair<uint32_t, double>> contour_areas;
+            for (uint32_t i = 0; i < target_contours.size(); ++i){
+                contour_areas.push_back(std::make_pair(i, cv::contourArea(target_contours.at(i))));
+            }
+
+
+            std::sort(contour_areas.begin(), contour_areas.end(), 
+                 [](std::pair<uint32_t, double> a, std::pair<uint32_t, double> b)
+                 {
+                     return a.second > b.second;
+                 }
+
+            );
+
+            largest_cont_index = contour_areas.at(0).first;
+            if(contour_areas.size() > 1){
+                second_largest_cont_index = contour_areas.at(1).first; 
+            }
+
+
+            if (largest_cont_index == -1){
+                std::cout << "ERROR: largest_cont_index was -1\n";  
+                abort();
+            } else if (largest_cont_index >= static_cast<int>(contour_hierarchy.size()) ){
+                std::cout << "ERROR: largest_cont_index was \n";  
+                abort();
+            }
+
+
+
+            // contour hierarchy is a vector of four element long vectors:
+            //
+            // contour_hierarchy[][NEXT_SAME_LEVEL]
+            // contour_hierarchy[][PREV_SAME_LEVEL]
+            // contour_hierarchy[][CHILD]
+            // contour_hierarchy[][PARENT]
+            // 
+
+            // draw the largest area contour
+            cv::Scalar color_largest( 0, 0, 255 );
+            cv::drawContours( input, target_contours, largest_cont_index, 
+                    color_largest, 2, CV_AA, contour_hierarchy, DRAW_SELECTED_CONTOUR );
+
+
+            // find largest sub-contour  
+            int child_level = contour_hierarchy[largest_cont_index][CHILD];
+            int curr_child = child_level;
+            int largest_child_index = -1;
+            double largest_child_area = INT_MIN;
+            
+            while( curr_child != -1 ){ 
+                double current_child_area = cv::contourArea(target_contours.at(curr_child));
+                if( largest_child_area < current_child_area ){
+                    largest_child_area = current_child_area;
+                    largest_child_index = curr_child;
+                }
+                curr_child = contour_hierarchy[curr_child][NEXT_SAME_LEVEL];
+            }
+
+
+
+
+            if( largest_child_index == -1 ){
+                std::cout << "No child of current contour exists...\n"; 
+            } else if( largest_child_area < 0.05*largest_cont_area ){
+                std::cout << "Child contour not large enough to be of interest.\n";
+
+                // send instructions to move towards the contour (improve our position towards goal) 
+
+            } else {
+
+                cv::Scalar color_child( 125, 125, 255 );
+                cv::drawContours( input, target_contours, largest_child_index, 
+                        color_child, 2, CV_AA, contour_hierarchy, 1 );
+
+
+                if ( second_largest_cont_index == -1 ){
+                    std::cout << "could not find second largest contour!\n";
+                    
+                } else {
+
+
+
+                    cv::drawContours( input, target_contours, second_largest_cont_index, 
+                    color_largest, 2, CV_AA, contour_hierarchy, DRAW_SELECTED_CONTOUR );
+
+
+                    // find center of first and second largest contours (to determine vector between them )
+                    cv::Rect target_primary  = boundingRect(target_contours.at(largest_cont_index)); 
+                    cv::Rect target_secondary = boundingRect(target_contours.at(second_largest_cont_index));
+                    
+
+
+                    cv::Scalar color_rect( 125, 255, 125 );
+                    int thickness = 4;
+                    int shift = 0;
+
+                    // draw the above:
+                    rectangle(input, target_primary, color_rect , thickness, CV_AA, shift);
+                    rectangle(input, target_secondary, color_rect, thickness, CV_AA, shift);
+
+
+                    cv::Point circle_target_center( (target_primary.x+(target_primary.width/2)), 
+                            (target_primary.y+(target_primary.height/2)) ); 
+
+                    cv::Point rectangle_target_center( (target_secondary.x+(target_secondary.width/2)), 
+                            (target_secondary.y+(target_secondary.height/2)) ); 
+
+
+                    // peter: direction vector will be one of these minus the other one...
+
+                    arrowedLine(input, circle_target_center, rectangle_target_center, cv::Scalar(0,0,255), 3, CV_AA, 0, 0.3);
+
+                }
+
+
+            }
+
+        }
+
+
+        imshow("input", input);
+
+
+        // handle exiting from loop with escape keys
+        int WAIT_DELAY = 1;
+        if(image_file_flag){
+            while(true){
+                short c = cv::waitKey(WAIT_DELAY); 
+                if(c == ESC_KEY) break;    
+            }
+        }
+        // change the 1 here to a different value to increase delay time
+        short c = cv::waitKey(WAIT_DELAY); 
+        // take a snapshot or exit capture mode
+        if(  c == ' ' ){
+            while(true){
+                c = cv::waitKey(WAIT_DELAY);
+                if(c == ' ' || c == 'q' || c == ESC_KEY) break;
+            }
+        }
+
+        if ( c == 'q' || c == ESC_KEY ){
+            std::cout << "Stopping capture..." << std::endl;
+            break;
+        }
+    
+
+
+
+    }
+
+
+    std::cout << "Cleaning up camera.\n"; 
+    cap.release();
+
+    cv::destroyAllWindows();
+
+    return 0;   
+}
+
+void print_usage(char* p)
+{
+    printf("usage: %s \n", p);
+
+    printf("\t-v [VIDEO_FILE]\t\tvideo file to use as input.\n\t\t\t");
+    printf("defaults to camera index 0.\n");
+
+    printf("\t-v [IMAGE_FILE]\t\timage file to use as input.\n\t\t\t");
+    printf("no defaiult value.\n");
+
+    printf("\t-c [CAMERA INDEX]\t\tcamera index to use.\n\t\t\t");
+    printf("defaults to camera index 0.\n");
+}
+
+
+
+void initialise(int argc, char* argv[], cv::VideoCapture& cap, cv::Point& center_point)
+{
+
+    if(CV_MAJOR_VERSION == 2){
+        std::cout << "USING OPENCV VER: 2\n";
+    } else if(CV_MAJOR_VERSION == 3){
+        std::cout << "USING OPENCV VER: 3\n";        
+    } else {
+        std::cout << "USING OPENCV VER: UNKNOWN\n";
+    }
+
+    bool video_file_flag = false;
+    bool image_file_flag = false;
+    
+    int c = 0;
+    // read in cmd line args
+    opterr = 0;
+    std::string video_file_path, image_file_path;
+    int cam_index = 0;
+
+    while ((c = getopt (argc, argv, "b:v:c:i:")) != -1){   
+        switch (c){
+            
+            case 'i':
+                image_file_flag = true;
+                image_file_path = optarg;
+                printf("Using image file at: %s.\n", video_file_path.c_str());
+                break;
+
+            case 'v':
+                video_file_flag = true;
+                video_file_path = optarg;
+                printf("Using video file at: %s.\n", video_file_path.c_str());
+                break;
+            
+            case 'c':
+                cam_index = std::stoi(optarg);
+                printf("Setting camera index to: %d\n", cam_index);
+                break;
+
+            case '?':
+                print_usage(argv[0]);    
+                exit(1);
+        
+            default:
+                print_usage(argv[0]);
+                abort ();
+        }
+    }
+
+
+
+    printf("Initialising capture object...\n");
+    if(video_file_flag){
+        printf("\tusing video file: %s\n", video_file_path.c_str());
+        cap = cv::VideoCapture(video_file_path);
+    } else if (image_file_flag) {
+        printf("\tusing image file: %s\n", image_file_path.c_str());
+        cap = cv::VideoCapture(image_file_path);
+    } else {
+        printf("\tusing input stream, video index %d\n", cam_index);
+        cap = cv::VideoCapture(cam_index);
+    }
+
+    if(!cap.isOpened()) {
+        printf("ERROR: could not open ");
+        exit(1);
+    } // check if we succeeded
+
+
+    int input_height = DEFAULT_VER_RES, input_width = DEFAULT_HOR_RES;
+
+    // set resolution of camera .
+    if(video_file_flag){
+        input_height = (int)cap.get(CV_CAP_PROP_FRAME_HEIGHT);
+        input_width = (int)cap.get(CV_CAP_PROP_FRAME_WIDTH); 
+        printf("\tvideo file dimensions: %d x %d\n",input_width, input_height);  
+        printf("\tvideo file framerate: %lf\n", cap.get(CV_CAP_PROP_FPS));
+        
+    } else {
+        cap.set(CV_CAP_PROP_FRAME_WIDTH, input_width);
+        cap.set(CV_CAP_PROP_FRAME_HEIGHT,input_height);        
+    }
+ 
+    // determine centerpoint of image
+    center_point = cv::Point(input_width/2, input_height/2);
+
+
+}

@@ -1,0 +1,3 @@
+/home/petey/temp_thesis/thesis_implementation/vision_experiments/colour_registration/build/CMakeFiles/edit_cache.dir
+/home/petey/temp_thesis/thesis_implementation/vision_experiments/colour_registration/build/CMakeFiles/rebuild_cache.dir
+/home/petey/temp_thesis/thesis_implementation/vision_experiments/colour_registration/build/CMakeFiles/color_registration.dir
