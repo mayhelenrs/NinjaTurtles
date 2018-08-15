@@ -32,14 +32,14 @@ def callback(rgb_msg):
     img_holder.rgb_img = bridge.imgmsg_to_cv2(rgb_msg, desired_encoding="passthrough")
     beacon_center = detect_beacon(img_holder.rgb_img)
 
-    for c in beacon_center:
+    #for c in beacon_center:
 
-            pos_x = int(float(c[0])/float(img_holder.rgb_msg.width) * float(img_holder.depth_msg.width))
-            pos_y = int(float(c[1])/float(img_holder.rgb_msg.height) * img_holder.depth_msg.height)
-            print("Depth coords: {}, {}".format(pos_x,pos_y))
-            cv2.rectangle(img_holder.depth_img, (pos_x-3, pos_y-3), (pos_x+3, pos_y+3), (0, 255, 0), 2)
-            cv2.imshow("depth", np.multiply(img_holder.depth_img,1.5))
-            print("Depth {}".format((img_holder.depth_msg.data[400])))
+            #pos_x = int(float(c[0])/float(img_holder.rgb_msg.width) * float(img_holder.depth_msg.width))
+            #pos_y = int(float(c[1])/float(img_holder.rgb_msg.height) * img_holder.depth_msg.height)
+            #print("Depth coords: {}, {}".format(pos_x,pos_y))
+            #cv2.rectangle(img_holder.depth_img, (pos_x-3, pos_y-3), (pos_x+3, pos_y+3), (0, 255, 0), 2)
+            #cv2.imshow("depth", np.multiply(img_holder.depth_img,1.5))
+            #print("Depth {}".format((img_holder.depth_msg.data[400])))
 
 
 def callback2(depth_msg):
@@ -60,7 +60,7 @@ def detect_beacon(img):
 
     # set up tools for detecting color
     kernel = np.ones((5,5),np.uint8)
-    upper_range = np.array([170,255,255])
+    upper_range = np.array([160,255,255])
     lower_range = np.array([90,100,100])
 
     # apply blur, mask and erode /dilate to find all pink reigons
@@ -71,21 +71,32 @@ def detect_beacon(img):
     img2, contours, hier = cv2.findContours(mask, cv2.RETR_TREE,\
                                             cv2.CHAIN_APPROX_SIMPLE)
 
+
     centers = list()
+
 
     # loop through all the pink edges we've found
     for c in contours:
         # get the bounding rect
         x, y, w, h = cv2.boundingRect(c)
 
+
         # add all the large areas to results - filter out anu remaining noise
+        # can use cv2.contourArea(c) to get area.
         #if w*h < 6000: #TODO change based on video quality
 
-        centers.append((x+w/2,y+h/2))
+        centers.append((x+w/2,y+h/2, cv2.contourArea(c)))
+
+        m = cv2.moments(c)
+        cX = int(m["m10"] / m["m00"])
+        cY = int(m["m01"] / m["m00"])
+        cv2.drawContours(image, [c], -1, (0, 255, 0), 2)
+        cv2.circle(image, (cX, cY), 7, (255, 255, 255), -1)
 
         # for debug draw a green rectangle to visualize the bounding rect
-        cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
+        #cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
+    sorted_list_of_centers = sorted(centers, key=lambda tup:tup[2])
     # only needed for debugnp
     cv2.imshow("RGB",image)
     cv2.imshow("Mask",mask)
