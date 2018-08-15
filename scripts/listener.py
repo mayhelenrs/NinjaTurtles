@@ -32,18 +32,42 @@ def callback(rgb_msg):
     img_holder.rgb_img = bridge.imgmsg_to_cv2(rgb_msg, desired_encoding="passthrough")
     beacon_center = detect_beacon(img_holder.rgb_img)
 
+    #print("width", img_holder.rgb_msg.width) # 640
+    #print("height", img_holder.rgb_msg.height) # 480
     for c in beacon_center:
-
-            pos_x = int(float(c[0])/float(img_holder.rgb_msg.width) * float(img_holder.depth_msg.width))
-            pos_y = int(float(c[1])/float(img_holder.rgb_msg.height) * img_holder.depth_msg.height)
+            pos_x = int(float(c[0])/float(img_holder.rgb_msg.width) * len(img_holder.depth_img[0]))
+            pos_y = int(float(c[1])/float(img_holder.rgb_msg.height) * len(img_holder.depth_img))
+            print("Color coord: {}, {}".format(c[0],c[1]))
             print("Depth coords: {}, {}".format(pos_x,pos_y))
             cv2.rectangle(img_holder.depth_img, (pos_x-3, pos_y-3), (pos_x+3, pos_y+3), (0, 255, 0), 2)
             cv2.imshow("depth", np.multiply(img_holder.depth_img,1.5))
-            print("Depth {}".format((img_holder.depth_msg.data[400])))
-
+            #img_holder.depth_img[y][x] -> I know its confusing... y = column, x = row
+            print("Depth at pixel: {}".format(img_holder.depth_img[229][94]))
+            depthValue = 0
+            depthCount = 0
+            for i in range(pos_y-10, pos_y+10): # Iterate through pixel height
+                for j in range(pos_x-30, pos_x+30): # Iterate through pixel width
+                    if (img_holder.depth_img[i][j] != 0): # Ignore 0 values
+                        depthValue += img_holder.depth_img[i][j]
+                        depthCount += 1
+            if (depthCount != 0): # We do not want to divide by zero
+                depthValue = depthValue / depthCount # Calculate the average
+            print("Average Depth Value at pixel: {}mm".format(depthValue))    
 
 def callback2(depth_msg):
     img_holder.depth_img = bridge.imgmsg_to_cv2(depth_msg, desired_encoding="passthrough")
+    #print("width:", len(img_holder.depth_img[0])) # 480 -> width    
+    #print("height:", len(img_holder.depth_img)) # 360 -> height
+    
+    #UNCOMMENT FOR DEBUGGING PURPOSES
+    #print("NewStart")
+    #xTemp = 60;
+    #yTemp = 234;
+    #for i in range(yTemp-10, yTemp+10):
+        #for j in range(xTemp-30, xTemp+30):
+            #if img_holder.depth_img[i][j] > 0:
+                #print(img_holder.depth_img[i][j], i, j)
+
     #print(depth_msg.data)
     #cv2.imshow("depth", depth_image)
     #print("d w:{}".format(depth_msg.width))
