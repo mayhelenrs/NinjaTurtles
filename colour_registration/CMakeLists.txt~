@@ -1,0 +1,60 @@
+# compile with: (or run ./bld in SOURCE_DIR (top level))
+# cmake -H. -Bbuild
+# cmake --build build -- -j3
+
+
+# --- compiler and cmake management --- #
+# specify minimum cmake version required
+cmake_minimum_required(VERSION 2.8)
+
+# specify name of project
+project(landing_tracking)
+
+# specify compile time flags
+set(CMAKE_CXX_FLAGS "-Wall -Werror -std=c++11 -O2 -Wno-unknown-pragmas -Wno-writable-strings -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-function")
+
+
+find_package(OpenCV 3)
+
+
+# --- directory management! (keep australia beautiful!) --- #
+# sets the path for our binary dir (top level in this case)
+set(CMAKE_BINARY_DIR ${CMAKE_SOURCE_DIR})
+
+# sets the output path for our binary output
+set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
+
+# set the path for our library(s)
+set(LIBRARY_OUTPUT_PATH ${CMAKE_BINARY_DIR})
+
+# The following folder(s) will be included
+include_directories("${PROJECT_SOURCE_DIR}")
+
+
+
+# -- local libraries and include files -- #
+# set(FILES  ${PROJECT_SOURCE_DIR}/src/camera_lib/camera_lib.cpp)
+# message(">>> setting files to include in build... ${FILES}")
+
+
+
+# -- header files etc -- #
+set(HEADER_FILES ${PROJECT_SOURCE_DIR}/includes/camera_lib.h)
+include_directories(${PROJECT_SOURCE_DIR}/includes)
+message(">>> setting header files to include in build... ${HEADER_FILES}")
+
+
+
+# -- package management --- #
+# define required packages
+find_package( OpenCV REQUIRED )
+
+
+
+# add source files and name executable
+add_executable(detect_target ${HEADER_FILES} ${PROJECT_SOURCE_DIR}/src/detect_target.cpp ${FILES} )
+
+
+# add target libraries
+message(">>> adding target libraries...")
+target_link_libraries( detect_target ${OpenCV_LIBS} )
