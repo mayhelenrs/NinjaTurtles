@@ -174,8 +174,6 @@ def callback(rgb_msg):
                 depth_pub.publish(str(avg_depth))
                 img_holder.depth_readings = list()
                 img_holder.supress_until = cur_time + datetime.timedelta(0,6)
-                cmd_pub.publish("start")
-
             time.sleep(1)
             return
 
@@ -222,7 +220,6 @@ def detect_beacon(img):
 
     pink = mask_detection(hsv, kernel, mask, image, pink_low, pink_upper)
 
-
     # loop through all the pink edges we've found
     if pink is not None:
         yellow = mask_detection(hsv, kernel, mask, image, yellow_low, yellow_high)
@@ -255,16 +252,23 @@ def detect_beacon(img):
         # can use cv2.contourArea(c) to get area.
         #if w*h < 6000: #TODO change based on video quality
         #centers.append((x+w/2,y+h/2, cv2.contourArea(pink)))
-
+        beacon_id = -1
         m = cv2.moments(pink)
         cX = int(m["m10"] / m["m00"])
         cY = int(m["m01"] / m["m00"])
-        if other_cY != -1 and other_cY > cY:
-            centers.append((color_name, "above"))
-            centers.append(("pink", "below"))
-        elif other_cY != -1 and cY > other_cY:
-            centers.append((color_name, "below"))
-            centers.append(("pink", "above"))
+        if other_cY != -1 and other_cY < cY:
+            if color_name == "blue":
+                beacon_id = 1
+            elif color_name == "yellow":
+                beacon_id = 3
+
+            centers.append((other_cX, other_cY))
+        elif other_cY != -1 and cY < other_cY:
+            if color_name == "green":
+                beacon_id = 0
+            elif color_name == "yellow":
+                beacon_id = 2
+            centers.append((cX, cY))
         cv2.drawContours(image, [pink], -1, (0, 255, 0), 2)
         cv2.circle(image, (cX, cY), 7, (255, 255, 255), -1)
 
