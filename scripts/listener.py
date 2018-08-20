@@ -5,6 +5,7 @@ import numpy as np
 import datetime
 import sys
 import rospy
+import time
 
 
 # import cv_bridge.CvBridge
@@ -23,9 +24,17 @@ class image_holder:
         self.rgb_img = None
         self.depth_img = None
 
+        self.next_update = None
+        self.flag = False
+
 
 def callback(rgb_msg):
+    if img_holder.flag:
+        return
 
+    img_holder.flag = True
+
+    curtime = datetime.datetime.now()
     img_holder.rgb_msg = rgb_msg
     #print("rgb w:{}".format(rgb_msg.width))
     #print("rgb h:{}".format(rgb_msg.height))
@@ -35,30 +44,94 @@ def callback(rgb_msg):
     #print("width", img_holder.rgb_msg.width) # 640
     #print("height", img_holder.rgb_msg.height) # 480
     for c in beacon_center:
-            pos_x = int(float(c[0])/float(img_holder.rgb_msg.width) * len(img_holder.depth_img[0]))
-            pos_y = int(float(c[1])/float(img_holder.rgb_msg.height) * len(img_holder.depth_img))
-            print("Color coord: {}, {}".format(c[0],c[1]))
-            print("Depth coords: {}, {}".format(pos_x,pos_y))
-            cv2.rectangle(img_holder.depth_img, (pos_x-3, pos_y-3), (pos_x+3, pos_y+3), (0, 255, 0), 2)
-            cv2.imshow("depth", np.multiply(img_holder.depth_img,1.5))
-            #img_holder.depth_img[y][x] -> I know its confusing... y = column, x = row
-            print("Depth at pixel: {}".format(img_holder.depth_img[229][94]))
-            depthValue = 0
-            depthCount = 0
-            for i in range(pos_y-10, pos_y+10): # Iterate through pixel height
-                for j in range(pos_x-30, pos_x+30): # Iterate through pixel width
-                    if (img_holder.depth_img[i][j] != 0): # Ignore 0 values
-                        depthValue += img_holder.depth_img[i][j]
-                        depthCount += 1
-            if (depthCount != 0): # We do not want to divide by zero
-                depthValue = depthValue / depthCount # Calculate the average
-            print("Average Depth Value at pixel: {}mm".format(depthValue))    
+
+            # create new twiar msg with stop command
+            vel_msg = Twist()
+            vel_msg.linear.x = 0
+            vel_msg.linear.y = 0
+            vel_msg.linear.z = 0
+            vel_msg.angular.x = 0
+            vel_msg.angular.y = 0
+            vel_msg.angular.z = 0
+
+            # attempt to center beacon in image
+            if(c[0] > 360): #way too far to the right
+                print("Turn right!") #turn left
+
+                vel_msg.angular.z = -0.1
+                vel_publisher.publish(vel_msg)
+                vel_msg.angular.z = -0.0
+                time.sleep(0.4)
+                vel_publisher.publish(vel_msg)
+
+
+            elif(c[0] > 330): #ittle far to the right
+                print("Turn right a lot!") #turn left
+                vel_msg.angular.z = -0.1
+                vel_publisher.publish(vel_msg)
+                time.sleep(0.1)
+                vel_msg.angular.z = -0.0
+                vel_publisher.publish(vel_msg)
+
+
+            elif(c[0] < 310): #little far to the left
+                print("Turn left a little!")
+                vel_msg.angular.z = +0.1
+                vel_publisher.publish(vel_msg)
+                time.sleep(0.1)
+                vel_msg.angular.z = -0.0
+                vel_publisher.publish(vel_msg)
+
+
+            elif(c[0] < 300): #too far to the left
+                print("Turn left a lot!")
+                vel_msg.angular.z = 0.1
+                vel_publisher.publish(vel_msg)
+                time.sleep(0.4)
+                vel_msg.angular.z = -0.0
+                vel_publisher.publish(vel_msg)
+            else:
+                #beacon more or less in centre of the screen:
+
+                #stop
+                print("centered... stop!")
+                vel_publisher.publish(vel_msg)
+
+
+                #verify still in center
+
+                #begin process of finding depth
+
+                pos_x = int(float(c[0])/float(img_holder.rgb_msg.width) * len(img_holder.depth_img[0]))
+                pos_y = int(float(c[1])/float(img_holder.rgb_msg.height) * len(img_holder.depth_img))
+                print("Color coord: {}, {}".format(c[0],c[1]))
+                print("Depth coords: {}, {}".format(pos_x,pos_y))
+                cv2.rectangle(img_holder.depth_img, (pos_x-3, pos_y-3), (pos_x+3, pos_y+3), (0, 255, 0), 2)
+                #cv2.imshow("depth", np.multiply(img_holder.depth_img,1.5))
+                #img_holder.depth_img[y][x] -> I know its confusing... y = column, x = row
+                depthValue = 0
+                depthCount = 0
+
+
+                for i in range(max(pos_y-10,0), min(pos_y+10,img_holder.depth_msg.height)): # Iterate through pixel height
+                    for j in range(max(pos_x-30,0), min(pos_x+30,img_holder.depth_msg.height)): # Iterate through pixel width
+                        if (img_holder.depth_img[i][j] != 0): # Ignore 0 values
+                            depthValue += img_holder.depth_img[i][j]
+                            depthCount += 1
+                if (depthCount != 0): # We do not want to divide by zero
+                    depthValue = depthValue / depthCount # Calculate the average
+                print("Average Depth Value at pixel: {}mm".format(depthValue))
+
+            #time.sleep(1)
+            img_holder.flag = False;
+            return
+
 
 def callback2(depth_msg):
     img_holder.depth_img = bridge.imgmsg_to_cv2(depth_msg, desired_encoding="passthrough")
-    #print("width:", len(img_holder.depth_img[0])) # 480 -> width    
+    #print("width:", len(img_holder.depth_img[0])) # 480 -> width
     #print("height:", len(img_holder.depth_img)) # 360 -> height
-    
+
     #UNCOMMENT FOR DEBUGGING PURPOSES
     #print("NewStart")
     #xTemp = 60;
@@ -109,18 +182,25 @@ def detect_beacon(img):
 
         # for debug draw a green rectangle to visualize the bounding rect
         cv2.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 2)
+        cv2.rectangle(hsv, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
+
+    '''
     # only needed for debugnp
     cv2.imshow("RGB",image)
     cv2.imshow("Mask",mask)
     cv2.imshow("hsv",hsv)
 
-
     cv2.waitKey(2)
+
+    '''
     return centers
 
 
 
+
+
+'''
 def listener():
 
     # In ROS, nodes are uniquely named. If two nodes with the same
@@ -134,14 +214,14 @@ def listener():
     rospy.Subscriber('/camera/depth/image_raw', Image, callback2)
     # spin() simply keeps python from exiting until this node is stopped
     print("waiting")
-
+'''
 
 if __name__ == '__main__':
 
     rospy.init_node('listener', anonymous=True)
 
-    rospy.Subscriber('/camera/color/image_raw', Image, callback)
-    rospy.Subscriber('/camera/depth/image_raw', Image, callback2)
+    rospy.Subscriber('/camera/color/image_raw', Image, callback, queue_size=1)
+    rospy.Subscriber('/camera/depth/image_raw', Image, callback2, queue_size=1)
     # spin() simply keeps python from exiting until this node is stopped
     print("waiting")
 
