@@ -191,7 +191,6 @@ def mask_detection(hsv, kernel, mask, image, low_threshold, high_threshold):
     mask = cv2.dilate(mask,kernel,iterations = 8)
     img2, contours, hier = cv2.findContours(mask, cv2.RETR_TREE,\
                                             cv2.CHAIN_APPROX_SIMPLE)
-    print(len(contours))
     sorted(contours, key=lambda c: cv2.contourArea(c))
     if len(contours) > 0 and cv2.contourArea(contours[-1]) > 6000:
         return contours[-1]
@@ -225,25 +224,25 @@ def detect_beacon(img):
 
 
     # loop through all the pink edges we've found
-    if pink != None:
+    if pink is not None:
         yellow = mask_detection(hsv, kernel, mask, image, yellow_low, yellow_high)
         blue = mask_detection(hsv, kernel, mask, image, blue_low, blue_high)
         green = mask_detection(hsv, kernel, mask, image, green_low, green_high)
 
         other_color = None
         color_name = ""
-        if yellow != None:
+        if yellow is not None:
             other_color = yellow
             color_name = "yellow"
-        elif blue != None:
+        elif blue is not None:
             other_color = blue
             color_name = "blue"
-        elif green != None:
+        elif green is not None:
             other_color = green
             color_name = "green"
 
         other_cY = -1
-        if other_color != None:
+        if other_color is not None:
             other_m = cv2.moments(other_color)
             other_cX = int(other_m["m10"] / other_m["m00"])
             other_cY = int(other_m["m01"] / other_m["m00"])
