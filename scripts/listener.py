@@ -24,26 +24,62 @@ class image_holder:
         self.rgb_img = None
         self.depth_img = None
 
-        self.next_update = None
+
+        self.supress_until = datetime.datetime.now()
         self.flag = False
+        self.waiting = False
+
+        self.depth_readings = list()
+
 
 
 def callback(rgb_msg):
-    if img_holder.flag:
+    cur_time = datetime.datetime.now()
+    print(cur_time),
+    if img_holder.supress_until > cur_time: #or cur_time < img_holder.supress_until:
+        print("supressed")
         return
-
     img_holder.flag = True
-
-    curtime = datetime.datetime.now()
     img_holder.rgb_msg = rgb_msg
     #print("rgb w:{}".format(rgb_msg.width))
     #print("rgb h:{}".format(rgb_msg.height))
     img_holder.rgb_img = bridge.imgmsg_to_cv2(rgb_msg, desired_encoding="passthrough")
+
+
+    img_holder.depth_msg =  rospy.wait_for_message('/camera/depth/image_raw', Image)
+    img_holder.depth_img = bridge.imgmsg_to_cv2(img_holder.depth_msg, desired_encoding="passthrough")
+
+
     beacon_center = detect_beacon(img_holder.rgb_img)
+
+    # We want the robot to stop for a second before taking a depth reading
+    # Can't have him trying to do depth on the fly
+    if len(beacon_center) == 0 and img_holder.waiting:
+        print("beacon lost")
+        cmd_pub.publish("start")
+        img_holder.flag = False;
+        img_holder.waiting = False
+        '''
+        vel_msg = Twist()
+        vel_msg.linear.x = 0
+        vel_msg.linear.y = 0
+        vel_msg.linear.z = 0
+        vel_msg.angular.x = 0
+        vel_msg.angular.y = 0
+        vel_msg.angular.z = -0.1
+        vel_publisher.publish(vel_msg)
+        '''
+
+        img_holder.depth_readings = list()
+        return
+
+
 
     #print("width", img_holder.rgb_msg.width) # 640
     #print("height", img_holder.rgb_msg.height) # 480
     for c in beacon_center:
+            cmd_pub.publish("stop")
+            waiting = True
 
             # create new twiar msg with stop command
             vel_msg = Twist()
@@ -54,40 +90,46 @@ def callback(rgb_msg):
             vel_msg.angular.y = 0
             vel_msg.angular.z = 0
 
+            long_wait = 0.2
+            short_wait = 0.05
+
             # attempt to center beacon in image
             if(c[0] > 360): #way too far to the right
                 print("Turn right!") #turn left
-
+                clear_invalid_readings()
                 vel_msg.angular.z = -0.1
                 vel_publisher.publish(vel_msg)
                 vel_msg.angular.z = -0.0
-                time.sleep(0.4)
+                time.sleep(long_wait)
                 vel_publisher.publish(vel_msg)
 
 
-            elif(c[0] > 330): #ittle far to the right
+            elif(c[0] > 345): #ittle far to the right
                 print("Turn right a lot!") #turn left
+                clear_invalid_readings()
                 vel_msg.angular.z = -0.1
                 vel_publisher.publish(vel_msg)
-                time.sleep(0.1)
+                time.sleep(short_wait)
                 vel_msg.angular.z = -0.0
                 vel_publisher.publish(vel_msg)
 
 
-            elif(c[0] < 310): #little far to the left
+            elif(c[0] < 305): #little far to the left
                 print("Turn left a little!")
+                clear_invalid_readings()
                 vel_msg.angular.z = +0.1
                 vel_publisher.publish(vel_msg)
-                time.sleep(0.1)
+                time.sleep(short_wait)
                 vel_msg.angular.z = -0.0
                 vel_publisher.publish(vel_msg)
 
 
-            elif(c[0] < 300): #too far to the left
+            elif(c[0] < 290): #too far to the left
                 print("Turn left a lot!")
+                clear_invalid_readings()
                 vel_msg.angular.z = 0.1
                 vel_publisher.publish(vel_msg)
-                time.sleep(0.4)
+                time.sleep(long_wait)
                 vel_msg.angular.z = -0.0
                 vel_publisher.publish(vel_msg)
             else:
@@ -99,8 +141,7 @@ def callback(rgb_msg):
 
 
                 #verify still in center
-
-                #begin process of finding depth
+                #if cur_time < img_holder.wait_until:
 
                 pos_x = int(float(c[0])/float(img_holder.rgb_msg.width) * len(img_holder.depth_img[0]))
                 pos_y = int(float(c[1])/float(img_holder.rgb_msg.height) * len(img_holder.depth_img))
@@ -120,33 +161,28 @@ def callback(rgb_msg):
                             depthCount += 1
                 if (depthCount != 0): # We do not want to divide by zero
                     depthValue = depthValue / depthCount # Calculate the average
-                print("Average Depth Value at pixel: {}mm".format(depthValue))
 
-            #time.sleep(1)
-            img_holder.flag = False;
+
+                img_holder.depth_readings.append(depthValue)
+                print("Depth Value at pixel: {}mm".format(depthValue))
+
+
+
+            if len(img_holder.depth_readings) > 5:
+                avg_depth = np.average(img_holder.depth_readings)
+                print("Avarage Depth Value at pixel: {}mm".format(avg_depth))
+                depth_pub.publish(str(avg_depth))
+                img_holder.depth_readings = list()
+                img_holder.supress_until = cur_time + datetime.timedelta(0,6)
+                cmd_pub.publish("start")
+
+            time.sleep(1)
             return
 
 
-def callback2(depth_msg):
-    img_holder.depth_img = bridge.imgmsg_to_cv2(depth_msg, desired_encoding="passthrough")
-    #print("width:", len(img_holder.depth_img[0])) # 480 -> width
-    #print("height:", len(img_holder.depth_img)) # 360 -> height
-
-    #UNCOMMENT FOR DEBUGGING PURPOSES
-    #print("NewStart")
-    #xTemp = 60;
-    #yTemp = 234;
-    #for i in range(yTemp-10, yTemp+10):
-        #for j in range(xTemp-30, xTemp+30):
-            #if img_holder.depth_img[i][j] > 0:
-                #print(img_holder.depth_img[i][j], i, j)
-
-    #print(depth_msg.data)
-    #cv2.imshow("depth", depth_image)
-    #print("d w:{}".format(depth_msg.width))
-    #print("d h:{}".format(depth_msg.height))
-    img_holder.depth_msg = depth_msg
-
+def clear_invalid_readings():
+    print("beacon not centered")
+    img_holder.depth_readings = list()
 
 
 def detect_beacon(img):
@@ -185,50 +221,27 @@ def detect_beacon(img):
         cv2.rectangle(hsv, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
 
-    '''
-    # only needed for debugnp
-    cv2.imshow("RGB",image)
-    cv2.imshow("Mask",mask)
-    cv2.imshow("hsv",hsv)
-
+    cv2.imshow("img", image)
     cv2.waitKey(2)
 
-    '''
     return centers
 
 
-
-
-
-'''
-def listener():
-
-    # In ROS, nodes are uniquely named. If two nodes with the same
-    # name are launched, the previous one is kicked off. The
-    # anonymous=True flag means that rospy will choose a unique
-    # name for our 'listener' node so that multiple listeners can
-    # run simultaneously.
-    rospy.init_node('listener', anonymous=True)
-
-    rospy.Subscriber('/camera/color/image_raw', Image, callback)
-    rospy.Subscriber('/camera/depth/image_raw', Image, callback2)
-    # spin() simply keeps python from exiting until this node is stopped
-    print("waiting")
-'''
 
 if __name__ == '__main__':
 
     rospy.init_node('listener', anonymous=True)
 
     rospy.Subscriber('/camera/color/image_raw', Image, callback, queue_size=1)
-    rospy.Subscriber('/camera/depth/image_raw', Image, callback2, queue_size=1)
+
     # spin() simply keeps python from exiting until this node is stopped
     print("waiting")
 
     bridge = CvBridge()
     img_holder = image_holder()
-    vel_publisher = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
+    vel_publisher = rospy.Publisher("/cmd_vel", Twist, queue_size=10) #TODO change back
     cmd_pub = rospy.Publisher("/cmd", String, queue_size=10)
+    depth_pub = rospy.Publisher("/depth_reading", String, queue_size=10)
     beacon_found = 0
 
     # depth_image = None
