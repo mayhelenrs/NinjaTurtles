@@ -234,19 +234,13 @@ def detect_beacon(img):
 
         # for debug draw a green rectangle to visualize the bounding rect
 
-
-
     # only needed for debugnp
     cv2.imshow("RGB",image)
     cv2.imshow("Mask",mask)
     cv2.imshow("hsv",hsv)
 
     cv2.waitKey(2)
-
-
     return centers
-
-
 
 
 
