@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import datetime
+import time
 import sys
 import time
 import math
@@ -27,10 +27,16 @@ class curr_position:
         self.timestamp = None
 
 def save_robot_pose(currPose):
-    if (curr_position.beacons_found[0]+curr_position.beacons_found[1]+curr_position.beacons_found[2]+curr_position.beacons_found[3] >= 4):
+    if ((curr_position.beacons_found[0]+curr_position.beacons_found[1]+curr_position.beacons_found[2]+curr_position.beacons_found[3]+curr_position.beacons_found[4]) >= 1):
         cmd_pub.publish("go_home")
-        print(curr_position.beacons_found)  
-    curr_position.timestamp = datetime.datetime.now()
+        curr_position.beacons_found[0] = 0
+        curr_position.beacons_found[1] = 0
+        curr_position.beacons_found[2] = 0
+        curr_position.beacons_found[3] = 0
+        curr_position.beacons_found[4] = 0
+        print(curr_position.beacons_found) 
+    print(curr_position.beacons_found[0],curr_position.beacons_found[1],curr_position.beacons_found[2],curr_position.beacons_found[3],curr_position.beacons_found[4])
+    curr_position.timestamp = time.time()
     curr_position.px = currPose.position.x
     curr_position.py = currPose.position.y
     curr_position.pz = currPose.position.z
@@ -45,21 +51,27 @@ def save_robot_pose(currPose):
 
 def callback(msg):
     #quaternion = (0,0,1,0)
-    closest_time = -1
+    msgSplit = msg.data.split()
+
+    min_time = None
     bRobot_position = curr_position
     for i in position_list:
-        if (i.timestamp < closest_time) or (i.timestamp < 0):
+        temp = float(msgSplit[2]) - i.timestamp
+        if (min_time is None) or (abs(temp) < min_time):
+            min_time = abs(temp)
             bRobot_position = i
-            closest_time = i.timestamp
+            temp_time = i.timestamp
+
     quaternion = (bRobot_position.ox, bRobot_position.oy, bRobot_position.oz, bRobot_position.ow)
     euler = tf.transformations.euler_from_quaternion(quaternion)
-    print("roll", euler[0])
-    print("pitch", euler[1])
-    print("yaw", euler[2])
-    msgSplit = msg.data.split()
+    print("time",bRobot_position.timestamp,":",temp_time)
+    #print("roll", euler[0])
+    #print("pitch", euler[1])
+    #print("yaw", euler[2])
+
     print(msgSplit)
     depth = (float(msgSplit[0])/1000) - 0.15
-    offset = 0.050
+    offset = 0.001
     length = math.sqrt((depth*depth) + (offset*offset))
     theta = math.atan(offset / depth)
     x = (math.cos(euler[2]-theta) * length) + bRobot_position.px
@@ -84,41 +96,52 @@ def callback(msg):
     marker.scale.z = 0.25
     marker.color.a = 1.0
     if(int(msgSplit[1]) == 0): # Green
-        curr_position.beacons_found[0] = 1
-        marker.color.r = 0
-        marker.color.g = 255
-        marker.color.b = 0       
+        if (curr_position.beacons_found[0] != 1):
+            curr_position.beacons_found[0] = 1
+            marker.color.r = 0
+            marker.color.g = 255
+            marker.color.b = 0    
+            pub.publish(marker)   
     elif(int(msgSplit[1]) == 1): # Blue
-        curr_position.beacons_found[1] = 1
-        marker.color.r = 0
-        marker.color.g = 0
-        marker.color.b = 255        
+        if (curr_position.beacons_found[1] != 1):
+            curr_position.beacons_found[1] = 1
+            marker.color.r = 0
+            marker.color.g = 0
+            marker.color.b = 255   
+            pub.publish(marker)     
     elif(int(msgSplit[1]) == 2): # Red
-        curr_position.beacons_found[2] = 1
-        marker.color.r = 255
-        marker.color.g = 0
-        marker.color.b = 0       
+        if (curr_position.beacons_found[2] != 1):
+            curr_position.beacons_found[2] = 1
+            marker.color.r = 255
+            marker.color.g = 0
+            marker.color.b = 0  
+            pub.publish(marker)     
     elif(int(msgSplit[1]) == 3): # Yellow
-        curr_position.beacons_found[3] = 1
-        marker.color.r = 255
-        marker.color.g = 255
-        marker.color.b = 0       
+        if (curr_position.beacons_found[3] != 1):    
+            curr_position.beacons_found[3] = 1
+            marker.color.r = 255
+            marker.color.g = 255
+            marker.color.b = 0 
+            pub.publish(marker)      
     else:
-        marker.color.r = 255
-        marker.color.g = 255
-        marker.color.b = 255
-    print("Xold:", curr_position.px)
-    print("Yold:", curr_position.py)
-    print("Xnew:", x)
-    print("Ynew:", y)
-    pub.publish(marker)
-    print(marker)
+        if (curr_position.beacons_found[4] != 1):    
+            curr_position.beacons_found[4] = 1
+            marker.color.r = 255
+            marker.color.g = 255
+            marker.color.b = 255
+            pub.publish(marker)
+    #print("Xold:", curr_position.px)
+    #print("Yold:", curr_position.py)
+    #print("Xnew:", x)
+    #print("Ynew:", y)
+    #pub.publish(marker)
+    #print(marker)
     #cmd_pub.publish("start")
     return
 
 if __name__ == '__main__':
     #beacon_found = 0
-    curr_position.beacons_found = [0, 0, 0, 0]
+    curr_position.beacons_found = [0, 0, 0, 0, 0]
     position_list = []
     rospy.init_node('beacon_location', anonymous=True)
     rospy.Subscriber('/robot_pose', Pose, save_robot_pose)
