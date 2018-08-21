@@ -111,7 +111,8 @@ def rgb_callback(rgb_msg):
 
         for i in range(max(pos_y-20,0), min(pos_y+20,img_holder.depth_msg.height)): # Iterate through pixel height
             for j in range(max(pos_x-10,0), min(pos_x+10,img_holder.depth_msg.height)): # Iterate through pixel width
-                if (img_holder.depth_img[i][j] != 0): # Ignore 0 values
+                newVal = img_holder.depth_img[i][j]
+                if (newVal != 0 and newVal < 1500): # Ignore 0 values
                     depthValue += img_holder.depth_img[i][j]
                     depthCount += 1
         if (depthCount != 0): # We do not want to divide by zero
@@ -334,8 +335,8 @@ if __name__ == '__main__':
 
     rospy.init_node('listener', anonymous=True)
 
-    rospy.Subscriber('/camera/color/image_raw', Image, rgb_callback, queue_size=1)
-    rospy.Subscriber('/camera/depth/image_raw', Image, depth_callback, queue_size=1)
+    rospy.Subscriber('/camera/color/image_raw', Image, rgb_callback)
+    rospy.Subscriber('/camera/depth/image_raw', Image, depth_callback)
 
 
     # spin() simply keeps python from exiting until this node is stopped
