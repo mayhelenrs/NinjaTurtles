@@ -22,7 +22,7 @@ class image_holder:
         self.depth_msg = None
 
         self.rgb_img = None
-        self.depth_img = None
+        self.depth_img_list = list()
 
 
         self.supress_until = datetime.datetime.now()
@@ -33,9 +33,21 @@ class image_holder:
 
 
 
-def callback(rgb_msg):
+def depth_callback(depth_msg):
+    #print("Got depth msg")
+    cv_img = bridge.imgmsg_to_cv2(depth_msg, desired_encoding="passthrough")
+    timestamp=  float(depth_msg.header.stamp.secs) + (float(depth_msg.header.stamp.nsecs)/1000000000.0)
+    img_holder.depth_img_list.append((cv_img,timestamp))
+    if(len(img_holder.depth_img_list) > 200):
+        img_holder.depth_img_list.pop(0)
+
+
+
+
+def rgb_callback(rgb_msg):
+
     cur_time = datetime.datetime.now()
-    print(cur_time),
+    #print(cur_time)
     if img_holder.supress_until > cur_time: #or cur_time < img_holder.supress_until:
         print("supressed")
         return
@@ -78,104 +90,72 @@ def callback(rgb_msg):
     #print("width", img_holder.rgb_msg.width) # 640
     #print("height", img_holder.rgb_msg.height) # 480
     for c in beacon_center:
-            cmd_pub.publish("stop")
-            waiting = True
+        print("{} Beacon detected ".format(len(beacon_center))),
+        img_holder.depth_img = find_closest_img(img_holder.rgb_msg.header.stamp)
 
-            # create new twiar msg with stop command
-            vel_msg = Twist()
-            vel_msg.linear.x = 0
-            vel_msg.linear.y = 0
-            vel_msg.linear.z = 0
-            vel_msg.angular.x = 0
-            vel_msg.angular.y = 0
-            vel_msg.angular.z = 0
+        #turn_to_beacon(c)
 
-            long_wait = 0.2
-            short_wait = 0.05
+            #verify still in center
+            #if cur_time < img_holder.wait_until:
 
-            # attempt to center beacon in image
-            if(c[0] > 360): #way too far to the right
-                print("Turn right!") #turn left
-                clear_invalid_readings()
-                vel_msg.angular.z = -0.1
-                vel_publisher.publish(vel_msg)
-                vel_msg.angular.z = -0.0
-                time.sleep(long_wait)
-                vel_publisher.publish(vel_msg)
+        pos_x = int(float(c[0])/float(img_holder.rgb_msg.width) * len(img_holder.depth_img[0]))
+        pos_y = int(float(c[1])/float(img_holder.rgb_msg.height) * len(img_holder.depth_img))
+        #print("Color coord: {}, {}".format(c[0],c[1]))
+        #print("Depth coords: {}, {}".format(pos_x,pos_y))
+        cv2.rectangle(img_holder.depth_img, (pos_x-3, pos_y-3), (pos_x+3, pos_y+3), (0, 255, 0), 2)
+        #cv2.imshow("depth", np.multiply(img_holder.depth_img,1.5))
+        #img_holder.depth_img[y][x] -> I know its confusing... y = column, x = row
+        depthValue = 0
+        depthCount = 0
 
 
-            elif(c[0] > 345): #ittle far to the right
-                print("Turn right a lot!") #turn left
-                clear_invalid_readings()
-                vel_msg.angular.z = -0.1
-                vel_publisher.publish(vel_msg)
-                time.sleep(short_wait)
-                vel_msg.angular.z = -0.0
-                vel_publisher.publish(vel_msg)
+        for i in range(max(pos_y-20,0), min(pos_y+20,img_holder.depth_msg.height)): # Iterate through pixel height
+            for j in range(max(pos_x-10,0), min(pos_x+10,img_holder.depth_msg.height)): # Iterate through pixel width
+                if (img_holder.depth_img[i][j] != 0): # Ignore 0 values
+                    depthValue += img_holder.depth_img[i][j]
+                    depthCount += 1
+        if (depthCount != 0): # We do not want to divide by zero
+            depthValue = depthValue / depthCount # Calculate the average
 
-
-            elif(c[0] < 305): #little far to the left
-                print("Turn left a little!")
-                clear_invalid_readings()
-                vel_msg.angular.z = +0.1
-                vel_publisher.publish(vel_msg)
-                time.sleep(short_wait)
-                vel_msg.angular.z = -0.0
-                vel_publisher.publish(vel_msg)
-
-
-            elif(c[0] < 290): #too far to the left
-                print("Turn left a lot!")
-                clear_invalid_readings()
-                vel_msg.angular.z = 0.1
-                vel_publisher.publish(vel_msg)
-                time.sleep(long_wait)
-                vel_msg.angular.z = -0.0
-                vel_publisher.publish(vel_msg)
-            else:
-                #beacon more or less in centre of the screen:
-
-                #stop
-                print("centered... stop!")
-                vel_publisher.publish(vel_msg)
-
-
-                #verify still in center
-                #if cur_time < img_holder.wait_until:
-
-                pos_x = int(float(c[0])/float(img_holder.rgb_msg.width) * len(img_holder.depth_img[0]))
-                pos_y = int(float(c[1])/float(img_holder.rgb_msg.height) * len(img_holder.depth_img))
-                print("Color coord: {}, {}".format(c[0],c[1]))
-                print("Depth coords: {}, {}".format(pos_x,pos_y))
-                cv2.rectangle(img_holder.depth_img, (pos_x-3, pos_y-3), (pos_x+3, pos_y+3), (0, 255, 0), 2)
-                #cv2.imshow("depth", np.multiply(img_holder.depth_img,1.5))
-                #img_holder.depth_img[y][x] -> I know its confusing... y = column, x = row
-                depthValue = 0
-                depthCount = 0
-
-
-                for i in range(max(pos_y-10,0), min(pos_y+10,img_holder.depth_msg.height)): # Iterate through pixel height
-                    for j in range(max(pos_x-30,0), min(pos_x+30,img_holder.depth_msg.height)): # Iterate through pixel width
-                        if (img_holder.depth_img[i][j] != 0): # Ignore 0 values
-                            depthValue += img_holder.depth_img[i][j]
-                            depthCount += 1
-                if (depthCount != 0): # We do not want to divide by zero
-                    depthValue = depthValue / depthCount # Calculate the average
-
-
-                img_holder.depth_readings.append(depthValue)
-                print("Depth Value at pixel: {}mm".format(depthValue))
-
-
-
-            if len(img_holder.depth_readings) > 5:
-                avg_depth = np.average(img_holder.depth_readings)
-                print("Avarage Depth Value at pixel: {}mm".format(avg_depth))
-                depth_pub.publish(str(avg_depth))
-                img_holder.depth_readings = list()
-                img_holder.supress_until = cur_time + datetime.timedelta(0,6)
-            time.sleep(1)
+        if (depthValue == 0 or depthValue > 2000):
+            print("Value discarded")
             return
+
+
+
+        img_holder.depth_readings.append(depthValue)
+        #s("Depth Value at pixel: {}mm".format(depthValue))
+
+        time = float(img_holder.rgb_msg.header.stamp.secs) + (float(img_holder.rgb_msg.header.stamp.nsecs)/1000000000.0)
+
+        depth_pub.publish(str(depthValue)+" "+str(c[3])+" "+str(time))
+
+    if len(img_holder.depth_readings) > 1: # How many buffer images
+        avg_depth = np.average(img_holder.depth_readings)
+        print("Avarage Depth Value at pixel: {}mm".format(avg_depth))
+        #depth_pub.publish(str(avg_depth)+" "+str(c[3]))
+        img_holder.depth_readings = list()
+        img_holder.supress_until = cur_time + datetime.timedelta(0,0)
+
+    return
+
+def find_closest_img(stamp):
+    #print("Looking for closest to {}".format(stamp))
+    time = float(stamp.secs) + (float(stamp.nsecs)/1000000000.0)
+    minDif = None
+    toReturn = None
+    for t in img_holder.depth_img_list:
+        temp = time - t[1]
+        #print("Dif:{} - {} = {}".format(time, t[1], temp))
+        if (minDif is None) or (abs(temp) < minDif):
+            minDif = abs(temp)
+            toReturn = t[0]
+
+
+    #print("MinDif = {}".format(minDif))
+    return toReturn
+
+
 
 
 def clear_invalid_readings():
@@ -190,7 +170,7 @@ def mask_detection(hsv, kernel, mask, image, low_threshold, high_threshold):
     img2, contours, hier = cv2.findContours(mask, cv2.RETR_TREE,\
                                             cv2.CHAIN_APPROX_SIMPLE)
     sorted(contours, key=lambda c: cv2.contourArea(c))
-    if len(contours) > 0 and cv2.contourArea(contours[-1]) > 6000:
+    if len(contours) > 0 and cv2.contourArea(contours[-1]) > 200:
         return contours[-1]
     return None
 
@@ -262,26 +242,90 @@ def detect_beacon(img):
             elif color_name == "yellow":
                 beacon_id = 3
 
-            centers.append((other_cX, other_cY))
+
         elif other_cY != -1 and cY < other_cY:
             if color_name == "green":
                 beacon_id = 0
             elif color_name == "yellow":
                 beacon_id = 2
-            centers.append((cX, cY))
+
+        centers.append((cX, cY,(other_cX, other_cY),beacon_id))
         cv2.drawContours(image, [pink], -1, (0, 255, 0), 2)
         cv2.circle(image, (cX, cY), 7, (255, 255, 255), -1)
 
         # for debug draw a green rectangle to visualize the bounding rect
 
     # only needed for debugnp
-    cv2.imshow("RGB",image)
-    cv2.imshow("Mask",mask)
-    cv2.imshow("hsv",hsv)
+    #cv2.imshow("RGB",image)
+    #cv2.imshow("Mask",mask)
+    #cv2.imshow("hsv",hsv)
 
     cv2.waitKey(2)
     return centers
 
+def turn_to_beacon(c):
+        # create new twiar msg with stop command
+        vel_msg = Twist()
+        vel_msg.linear.x = 0
+        vel_msg.linear.y = 0
+        vel_msg.linear.z = 0
+        vel_msg.angular.x = 0
+        vel_msg.angular.y = 0
+        vel_msg.angular.z = 0
+
+        short_wait = 0.1
+        long_wait = 0.5
+
+        center = img_holder.rgb_msg.width / 2
+        wide_margin = 0.2*center
+        slim_margin = 0.1*center
+
+        #print("c[0]")
+        # attempt to center beacon in image
+        if(c[0] > center + wide_margin): #way too far to the right
+            print("Turn right!") #turn left
+            clear_invalid_readings()
+            vel_msg.angular.z = -0.1
+            vel_publisher.publish(vel_msg)
+            vel_msg.angular.z = -0.0
+            time.sleep(long_wait)
+            vel_publisher.publish(vel_msg)
+
+
+        elif(c[0] > center + slim_margin): #ittle far to the right
+            print("Turn right a lot!") #turn left
+            clear_invalid_readings()
+            vel_msg.angular.z = -0.1
+            vel_publisher.publish(vel_msg)
+            time.sleep(short_wait)
+            vel_msg.angular.z = -0.0
+            vel_publisher.publish(vel_msg)
+
+
+        elif(c[0] < center - slim_margin): #little far to the left
+            print("Turn left a little!")
+            clear_invalid_readings()
+            vel_msg.angular.z = 0.1
+            vel_publisher.publish(vel_msg)
+            time.sleep(short_wait)
+            vel_msg.angular.z = -0.0
+            vel_publisher.publish(vel_msg)
+
+
+        elif(c[0] < center - wide_margin): #too far to the left
+            print("Turn left a lot!")
+            clear_invalid_readings()
+            vel_msg.angular.z = 0.1
+            vel_publisher.publish(vel_msg)
+            time.sleep(long_wait)
+            vel_msg.angular.z = -0.0
+            vel_publisher.publish(vel_msg)
+        else:
+            #beacon more or less in centre of the screen:
+
+            #stop
+            print("centered... stop!")
+            vel_publisher.publish(vel_msg)
 
 
 
@@ -290,7 +334,9 @@ if __name__ == '__main__':
 
     rospy.init_node('listener', anonymous=True)
 
-    rospy.Subscriber('/camera/color/image_raw', Image, callback, queue_size=1)
+    rospy.Subscriber('/camera/color/image_raw', Image, rgb_callback, queue_size=1)
+    rospy.Subscriber('/camera/depth/image_raw', Image, depth_callback, queue_size=1)
+
 
     # spin() simply keeps python from exiting until this node is stopped
     print("waiting")
