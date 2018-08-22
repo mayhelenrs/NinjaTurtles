@@ -1,0 +1,58 @@
+<launch>
+  <remap from="/map" to="comp3431/map"/>
+  <!-- Arguments -->
+  <arg name="model" default="$(env TURTLEBOT3_MODEL)" doc="model type [burger, waffle, waffle_pi]"/>
+  <arg name="open_rviz" default="true"/>
+
+  <!-- Turtlebot3 -->
+  <include file="$(find turtlebot3_bringup)/launch/turtlebot3_remote.launch">
+    <arg name="model" value="$(arg model)" />
+  </include>
+
+
+   <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" >
+        <rosparam>
+        scan : base_scan
+        </rosparam>
+        <param name="delta" value="0.035"/>
+    </node>
+
+    <!-- <include file="$(find turtlebot3_slam)/launch/turtlebot3_slam.launch">
+    <arg name="slam_methods" value="gmapping" />
+    </include>-->
+
+     <node pkg="comp3431_starter" type="comp3431_starter_wallfollow" name="comp3431_starter_wallfollow" output="screen">
+        <rosparam>
+        </rosparam>
+    </node>
+    
+
+
+  <!-- AMCL -->
+  <include file="$(find turtlebot3_navigation)/launch/amcl.launch"/>
+
+  <!-- move_base -->
+  <include file="$(find turtlebot3_navigation)/launch/move_base.launch">
+    <arg name="model" value="$(arg model)" />
+  </include>
+
+  <!-- Robot pose publisher-->
+   <node pkg="robot_pose_publisher" type="robot_pose_publisher" name="robot_pose_publisher" >
+    </node>
+
+      <!-- path publisher  node-->
+  <node pkg="comp3431_starter" type="path_publish_node.py" name="path_publish_node">
+    </node>
+
+    <!-- movement control node-->
+  <node pkg="comp3431_starter" type="movement_control_node.py" name="movement_control_node">
+    </node>
+
+  <!-- rviz -->
+  <group if="$(arg open_rviz)"> 
+    <node pkg="rviz" type="rviz" name="rviz" required="true"
+     />
+  </group>
+</launch>
+
+<!-- args="-d $(find comp3431_starter)/src/rviz/turtlebot.rviz"/ -->
