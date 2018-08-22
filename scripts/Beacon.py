@@ -34,7 +34,7 @@ def save_robot_pose(currPose):
         curr_position.beacons_found[2] = 0
         curr_position.beacons_found[3] = 0
         curr_position.beacons_found[4] = 0
-        print(curr_position.beacons_found) 
+        print(curr_position.beacons_found)
     print(curr_position.beacons_found[0],curr_position.beacons_found[1],curr_position.beacons_found[2],curr_position.beacons_found[3],curr_position.beacons_found[4])
     curr_position.timestamp = time.time()
     curr_position.px = currPose.position.x
@@ -81,7 +81,7 @@ def callback(msg):
     #y = (math.sin(euler[2]) * depth) + curr_position.py
     marker = Marker();
     marker.header.frame_id = "map";
-    marker.id = int(msgSplit[1])   
+    marker.id = int(msgSplit[1])
     marker.header.stamp = rospy.Time.now()
     marker.type = Marker.CYLINDER
     marker.pose.position.x = x
@@ -100,31 +100,31 @@ def callback(msg):
             curr_position.beacons_found[0] = 1
             marker.color.r = 0
             marker.color.g = 255
-            marker.color.b = 0    
-            pub.publish(marker)   
+            marker.color.b = 0
+            pub.publish(marker)
     elif(int(msgSplit[1]) == 1): # Blue
         if (curr_position.beacons_found[1] != 1):
             curr_position.beacons_found[1] = 1
             marker.color.r = 0
             marker.color.g = 0
-            marker.color.b = 255   
-            pub.publish(marker)     
+            marker.color.b = 255
+            pub.publish(marker)
     elif(int(msgSplit[1]) == 2): # Red
         if (curr_position.beacons_found[2] != 1):
             curr_position.beacons_found[2] = 1
             marker.color.r = 255
             marker.color.g = 0
-            marker.color.b = 0  
-            pub.publish(marker)     
+            marker.color.b = 0
+            pub.publish(marker)
     elif(int(msgSplit[1]) == 3): # Yellow
-        if (curr_position.beacons_found[3] != 1):    
+        if (curr_position.beacons_found[3] != 1):
             curr_position.beacons_found[3] = 1
             marker.color.r = 255
             marker.color.g = 255
-            marker.color.b = 0 
-            pub.publish(marker)      
+            marker.color.b = 0
+            pub.publish(marker)
     else:
-        if (curr_position.beacons_found[4] != 1):    
+        if (curr_position.beacons_found[4] != 1):
             curr_position.beacons_found[4] = 1
             marker.color.r = 255
             marker.color.g = 255
@@ -147,6 +147,6 @@ if __name__ == '__main__':
     rospy.Subscriber('/robot_pose', Pose, save_robot_pose)
     rospy.Subscriber('/depth_reading', String, callback)
     #rospy.Subscriber('/beacon',BLAH, callback2)
-    pub = rospy.Publisher('/comp3431/beacons', Marker, queue_size=10) 
+    pub = rospy.Publisher('/comp3431/beacons', Marker, queue_size=10)
     cmd_pub = rospy.Publisher('/cmd', String, queue_size=10)
     rospy.spin()
