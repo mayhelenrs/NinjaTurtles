@@ -27,15 +27,18 @@ class curr_position:
         self.timestamp = None
 
 def save_robot_pose(currPose):
-    if ((curr_position.beacons_found[0]+curr_position.beacons_found[1]+curr_position.beacons_found[2]+curr_position.beacons_found[3]+curr_position.beacons_found[4]) >= 1):
-        cmd_pub.publish("go_home")
-        curr_position.beacons_found[0] = 0
-        curr_position.beacons_found[1] = 0
-        curr_position.beacons_found[2] = 0
-        curr_position.beacons_found[3] = 0
-        curr_position.beacons_found[4] = 0
-        print(curr_position.beacons_found)
     print(curr_position.beacons_found[0],curr_position.beacons_found[1],curr_position.beacons_found[2],curr_position.beacons_found[3],curr_position.beacons_found[4])
+    if ((curr_position.beacons_found[0]+curr_position.beacons_found[1]+curr_position.beacons_found[2]+curr_position.beacons_found[3]) >= 4):
+        beacons_found.publish("1")
+        #curr_position.beacons_found[0] = 0
+        #curr_position.beacons_found[1] = 0
+        #curr_position.beacons_found[2] = 0
+        #curr_position.beacons_found[3] = 0
+        #curr_position.beacons_found[4] = 0
+        #print(curr_position.beacons_found) 
+        print("Done")
+    else:
+        beacons_found.publish("0")
     curr_position.timestamp = time.time()
     curr_position.px = currPose.position.x
     curr_position.py = currPose.position.y
@@ -120,7 +123,7 @@ def callback(msg):
         if (curr_position.beacons_found[3] != 1):
             curr_position.beacons_found[3] = 1
             marker.color.r = 255
-            marker.color.g = 255
+            marker.color.g = 255 
             marker.color.b = 0
             pub.publish(marker)
     else:
@@ -130,23 +133,18 @@ def callback(msg):
             marker.color.g = 255
             marker.color.b = 255
             pub.publish(marker)
-    #print("Xold:", curr_position.px)
-    #print("Yold:", curr_position.py)
-    #print("Xnew:", x)
-    #print("Ynew:", y)
-    #pub.publish(marker)
-    #print(marker)
-    #cmd_pub.publish("start")
     return
 
 if __name__ == '__main__':
     #beacon_found = 0
     curr_position.beacons_found = [0, 0, 0, 0, 0]
+    #curr_position.beacons_found = [1, 1, 1, 1, 1]
+    print(curr_position.beacons_found)
+    time.sleep(3)
     position_list = []
     rospy.init_node('beacon_location', anonymous=True)
     rospy.Subscriber('/robot_pose', Pose, save_robot_pose)
     rospy.Subscriber('/depth_reading', String, callback)
-    #rospy.Subscriber('/beacon',BLAH, callback2)
-    pub = rospy.Publisher('/comp3431/beacons', Marker, queue_size=10)
-    cmd_pub = rospy.Publisher('/cmd', String, queue_size=10)
+    beacons_found = rospy.Publisher('/beacons_found',String, queue_size=10)
+    pub = rospy.Publisher('/comp3431/beacons', Marker, queue_size=10) 
     rospy.spin()
