@@ -227,32 +227,32 @@ def detect_beacon(img):
             cv2.drawContours(image, [other_color], -1, (0, 255, 0), 2)
             cv2.circle(image, (other_cX, other_cY), 7, (255, 255, 255), -1)
 
-        # get the bounding rect
-        x, y, w, h = cv2.boundingRect(pink)
-        # add all the large areas to results - filter out anu remaining noise
-        # can use cv2.contourArea(c) to get area.
-        #if w*h < 6000: #TODO change based on video quality
-        #centers.append((x+w/2,y+h/2, cv2.contourArea(pink)))
-        beacon_id = -1
-        m = cv2.moments(pink)
-        cX = int(m["m10"] / m["m00"])
-        cY = int(m["m01"] / m["m00"])
-        if other_cY != -1 and other_cY < cY:
-            if color_name == "blue":
-                beacon_id = 1
-            elif color_name == "yellow":
-                beacon_id = 3
+            # get the bounding rect
+            x, y, w, h = cv2.boundingRect(pink)
+            # add all the large areas to results - filter out anu remaining noise
+            # can use cv2.contourArea(c) to get area.
+            #if w*h < 6000: #TODO change based on video quality
+            #centers.append((x+w/2,y+h/2, cv2.contourArea(pink)))
+            beacon_id = -1
+            m = cv2.moments(pink)
+            cX = int(m["m10"] / m["m00"])
+            cY = int(m["m01"] / m["m00"])
+            if other_cY != -1 and other_cY < cY:
+                if color_name == "blue":
+                    beacon_id = 1
+                elif color_name == "yellow":
+                    beacon_id = 3
 
 
-        elif other_cY != -1 and cY < other_cY:
-            if color_name == "green":
-                beacon_id = 0
-            elif color_name == "yellow":
-                beacon_id = 2
+            elif other_cY != -1 and cY < other_cY:
+                if color_name == "green":
+                    beacon_id = 0
+                elif color_name == "yellow":
+                    beacon_id = 2
 
-        centers.append((cX, cY,(other_cX, other_cY),beacon_id))
-        cv2.drawContours(image, [pink], -1, (0, 255, 0), 2)
-        cv2.circle(image, (cX, cY), 7, (255, 255, 255), -1)
+            centers.append((cX, cY,(other_cX, other_cY),beacon_id))
+            cv2.drawContours(image, [pink], -1, (0, 255, 0), 2)
+            cv2.circle(image, (cX, cY), 7, (255, 255, 255), -1)
 
         # for debug draw a green rectangle to visualize the bounding rect
 
